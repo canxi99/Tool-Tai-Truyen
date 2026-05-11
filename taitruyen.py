@@ -1,3 +1,5 @@
+import urllib.request
+import sys
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from selenium import webdriver
@@ -10,11 +12,45 @@ import json
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
+# ================= HỆ THỐNG AUTO-UPDATE =================
+APP_VERSION = 1.0  # Mỗi lần đăng Github, bạn nhớ nâng số này lên (VD: 1.1)
+
+VERSION_URL = "https://raw.githubusercontent.com/canxi99/Tool-Tai-Truyen/refs/heads/main/version.txt"
+CODE_URL = "https://raw.githubusercontent.com/canxi99/Tool-Tai-Truyen/refs/heads/main/taitruyen.py"
+
+def check_for_updates():
+    try:
+        req = urllib.request.Request(VERSION_URL, headers={'User-Agent': 'Mozilla/5.0'})
+        response = urllib.request.urlopen(req, timeout=3)
+        latest_version = float(response.read().decode('utf-8').strip())
+
+        if latest_version > APP_VERSION:
+            root_upd = tk.Tk()
+            root_upd.withdraw()
+            result = messagebox.askyesno("Có bản cập nhật mới!", 
+                                         f"Tuyệt vời! Tác giả vừa ra mắt phiên bản v{latest_version}.\n"
+                                         "Bạn có muốn phần mềm tự động tải và cập nhật ngay không?")
+            if result:
+                req_code = urllib.request.Request(CODE_URL, headers={'User-Agent': 'Mozilla/5.0'})
+                new_code = urllib.request.urlopen(req_code, timeout=10).read().decode('utf-8')
+                
+                with open(sys.argv[0], 'w', encoding='utf-8') as f:
+                    f.write(new_code)
+                
+                messagebox.showinfo("Thành công", "Đã cập nhật xong! Phần mềm sẽ tự khởi động lại.")
+                os.execv(sys.executable, ['python'] + sys.argv)
+            root_upd.destroy()
+    except Exception:
+        pass # Không có mạng hoặc link lỗi thì bỏ qua, cho xài bản cũ
+
+# Chạy kiểm tra update ngay khi mở phần mềm
+check_for_updates()
+
+# ================= CÁC BIẾN TOÀN CỤC & CẤU HÌNH =================
 CONFIG_FILE = "novel_configs.json"
 pause_event = threading.Event()
 pause_event.set()
 
-# ================= CÁC HÀM QUẢN LÝ CẤU HÌNH =================
 def load_configs():
     if os.path.exists(CONFIG_FILE):
         try:
@@ -47,7 +83,6 @@ def save_current_config():
     if not name:
         messagebox.showwarning("Lỗi", "Vui lòng nhập Tên Cấu Hình để lưu!")
         return
-        
     configs = load_configs()
     configs[name] = {
         "sel_title": title_entry.get().strip(),
@@ -59,7 +94,7 @@ def save_current_config():
     save_configs_to_file(configs)
     update_combo()
     config_combo.set(name) 
-    messagebox.showinfo("Thành công", f"Đã lưu cấu hình trang web: {name}")
+    messagebox.showinfo("Thành công", f"Đã lưu cấu hình: {name}")
 
 def choose_directory():
     folder_selected = filedialog.askdirectory(title="Chọn thư mục lưu truyện")
@@ -78,107 +113,76 @@ def download_sample_excel():
         initialfile="Mau_Danh_Sach_Truyen.xlsx",
         title="Lưu file Excel mẫu"
     )
-    if not file_path:
-        return
-
+    if not file_path: return
     try:
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Danh sách truyện"
-
-        # Tiêu đề
         headers = ["STT", "Link chương 1", "Tên Truyện", "Từ chương", "Số lượng tải"]
         ws.append(headers)
-
-        # Dữ liệu mẫu
         data = [
             [1, "https://example.com/truyen-a/chuong-1", "Truyện A", 1, 1000],
-            [2, "https://example.com/truyen-b/chuong-1", "Truyện B", 15, 1000],
-            [3, "", "", "", ""]
+            [2, "", "", "", ""]
         ]
-        for row in data:
-            ws.append(row)
+        for row in data: ws.append(row)
 
-        # Định dạng file cho đẹp
         header_font = Font(bold=True, color="FFFFFF")
         header_fill = PatternFill(start_color="007BFF", end_color="007BFF", fill_type="solid")
         alignment = Alignment(horizontal="center", vertical="center")
         thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
 
         for cell in ws[1]:
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = alignment
-            cell.border = thin_border
+            cell.font = header_font; cell.fill = header_fill
+            cell.alignment = alignment; cell.border = thin_border
 
-        ws.column_dimensions['A'].width = 8
-        ws.column_dimensions['B'].width = 50
-        ws.column_dimensions['C'].width = 30
-        ws.column_dimensions['D'].width = 12
+        ws.column_dimensions['A'].width = 8; ws.column_dimensions['B'].width = 50
+        ws.column_dimensions['C'].width = 30; ws.column_dimensions['D'].width = 12
         ws.column_dimensions['E'].width = 15
 
         wb.save(file_path)
         messagebox.showinfo("Thành công", f"Đã lưu file mẫu tại:\n{file_path}")
-        # Mở luôn file lên cho tiện
         os.startfile(file_path)
     except Exception as e:
         messagebox.showerror("Lỗi", f"Không thể tạo file Excel:\n{str(e)}")
 
 def import_excel_data():
     file_path = filedialog.askopenfilename(title="Chọn file Excel", filetypes=[("Excel files", "*.xlsx *.xls")])
-    if not file_path:
-        return
-        
+    if not file_path: return
     try:
         wb = openpyxl.load_workbook(file_path)
         ws = wb.active
-        
-        # Bắt đầu đọc từ dòng số 2 (Bỏ qua dòng tiêu đề)
         row_idx = 2
-        for i in range(10): # Chỉ điền tối đa 10 ô hiển thị trên UI
-            if row_idx > ws.max_row:
-                break
-                
+        for i in range(10): 
+            if row_idx > ws.max_row: break
             link = ws.cell(row=row_idx, column=2).value
             name = ws.cell(row=row_idx, column=3).value
             start = ws.cell(row=row_idx, column=4).value
             count = ws.cell(row=row_idx, column=5).value
             
             if link and name:
-                url_entries[i].delete(0, tk.END)
-                url_entries[i].insert(0, str(link).strip())
-                
-                name_entries[i].delete(0, tk.END)
-                name_entries[i].insert(0, str(name).strip())
-                
-                start_entries[i].delete(0, tk.END)
-                start_entries[i].insert(0, str(start) if start else "1")
-                
-                count_entries[i].delete(0, tk.END)
-                count_entries[i].insert(0, str(count) if count else "1000")
+                url_entries[i].delete(0, tk.END); url_entries[i].insert(0, str(link).strip())
+                name_entries[i].delete(0, tk.END); name_entries[i].insert(0, str(name).strip())
+                start_entries[i].delete(0, tk.END); start_entries[i].insert(0, str(start) if start else "1")
+                count_entries[i].delete(0, tk.END); count_entries[i].insert(0, str(count) if count else "1000")
             row_idx += 1
-            
         messagebox.showinfo("Thành công", "Đã nạp danh sách truyện từ Excel thành công!")
     except Exception as e:
-        messagebox.showerror("Lỗi", f"Không thể đọc file Excel. Vui lòng đảm bảo file đang đóng.\nChi tiết lỗi: {str(e)}")
+        messagebox.showerror("Lỗi", f"Không thể đọc file Excel. Chi tiết: {str(e)}")
 
-# ================= CÁC HÀM ĐIỀU KHIỂN =================
+# ================= CÁC HÀM ĐIỀU KHIỂN NÚT BẤM =================
 def pause_bot():
     pause_event.clear()
-    pause_btn.config(state=tk.DISABLED)
-    resume_btn.config(state=tk.NORMAL)
+    pause_btn.config(state=tk.DISABLED); resume_btn.config(state=tk.NORMAL)
     status_label.config(text="Trạng thái: ⏸ ĐÃ TẠM DỪNG", fg="red")
 
 def resume_bot():
     pause_event.set()
-    resume_btn.config(state=tk.DISABLED)
-    pause_btn.config(state=tk.NORMAL)
+    resume_btn.config(state=tk.DISABLED); pause_btn.config(state=tk.NORMAL)
     status_label.config(text="Trạng thái: ▶️ Đang tiếp tục chạy...", fg="green")
 
 def reset_buttons():
     start_btn.config(state=tk.NORMAL)
-    pause_btn.config(state=tk.DISABLED)
-    resume_btn.config(state=tk.DISABLED)
+    pause_btn.config(state=tk.DISABLED); resume_btn.config(state=tk.DISABLED)
 
 # ================= HÀM CHẠY BOT CỐT LÕI =================
 def run_bot(base_path, task_list, sel_title, sel_content, sel_next, sel_remove, text_remove, delay_time):
@@ -216,7 +220,6 @@ def run_bot(base_path, task_list, sel_title, sel_content, sel_next, sel_remove, 
 
             while copied_count < num_chapters:
                 pause_event.wait()
-                
                 status_label.config(text=f"Trạng thái: [{task_idx}/{total_tasks}] Tải '{story_name}' - Chương {current_chap}", fg="orange")
                 time.sleep(delay_time)
 
@@ -256,16 +259,13 @@ def run_bot(base_path, task_list, sel_title, sel_content, sel_next, sel_remove, 
                 while attempts < 2:
                     pause_event.wait()
                     next_btn = None
-                    
                     if sel_next:
                         try: next_btn = driver.find_elements(By.CSS_SELECTOR, sel_next)[0]
                         except: pass
-                    
                     if not next_btn:
                         for link in driver.find_elements(By.TAG_NAME, "a"):
                             if "chương tiếp" in link.text.lower() or "next chapter" in link.text.lower():
-                                next_btn = link
-                                break
+                                next_btn = link; break
                     
                     if next_btn: break 
                     
@@ -275,13 +275,10 @@ def run_bot(base_path, task_list, sel_title, sel_content, sel_next, sel_remove, 
                             if pause_event.is_set():
                                 status_label.config(text=f"Trạng thái: [{task_idx}/{total_tasks}] Không thấy Next. Đợi {i}s F5...", fg="magenta")
                             time.sleep(1)
-                        
                         pause_event.wait()
                         if pause_event.is_set():
                             status_label.config(text="Trạng thái: 🔄 Đang F5 kiểm tra lại lần cuối...", fg="blue")
-                            driver.refresh()
-                            time.sleep(3) 
-                    
+                            driver.refresh(); time.sleep(3) 
                     attempts += 1
 
                 if next_btn:
@@ -291,7 +288,6 @@ def run_bot(base_path, task_list, sel_title, sel_content, sel_next, sel_remove, 
                         if n_url and n_url != "#" and "javascript" not in n_url: driver.get(n_url)
                         else: next_btn.click()
                     except: driver.execute_script("arguments[0].click();", next_btn)
-                    
                     current_chap += 1
                 else:
                     print(f"🎉 Truyện '{story_name}' đã hết. Đang nhảy sang tác vụ tiếp theo!")
@@ -309,23 +305,19 @@ def run_bot(base_path, task_list, sel_title, sel_content, sel_next, sel_remove, 
 
 def start_thread():
     base_path = path_entry.get().strip()
-    sel_title = title_entry.get().strip()
-    sel_content = content_entry.get().strip()
-    sel_next = next_entry.get().strip()
-    sel_remove = remove_entry.get().strip()
+    sel_title = title_entry.get().strip(); sel_content = content_entry.get().strip()
+    sel_next = next_entry.get().strip(); sel_remove = remove_entry.get().strip()
     text_remove = text_remove_entry.get().strip() 
     
     try: delay_time = float(delay_entry.get().strip())
     except: messagebox.showerror("Lỗi", "Độ trễ phải là số!"); return
-    
     if not sel_next: messagebox.showerror("Lỗi", "Vui lòng nhập Selector Nút Next!"); return
 
     task_list = []
     for i in range(10):
         u, n = url_entries[i].get().strip(), name_entries[i].get().strip()
         if u and n:
-            try:
-                task_list.append({'url': u, 'name': n, 'start': int(start_entries[i].get().strip()), 'count': int(count_entries[i].get().strip())})
+            try: task_list.append({'url': u, 'name': n, 'start': int(start_entries[i].get().strip()), 'count': int(count_entries[i].get().strip())})
             except: messagebox.showerror("Lỗi", f"Dòng {i+1} nhập số không đúng!"); return
 
     if not task_list: messagebox.showerror("Lỗi", "Danh sách trống!"); return
@@ -335,8 +327,8 @@ def start_thread():
 
 # ================= GIAO DIỆN CHÍNH (UI) =================
 root = tk.Tk()
-root.title("Auto Novel Downloader Pro Max (Excel Integration)")
-root.geometry("820x920") # Tăng chiều dài để chứa nút Excel
+root.title(f"Auto Novel Downloader Pro Max (v{APP_VERSION})")
+root.geometry("820x920") 
 root.configure(padx=15, pady=10)
 
 frame_top = tk.LabelFrame(root, text="Thiết lập Chung", padx=10, pady=10, font=("Arial", 9, "bold"))
@@ -353,13 +345,11 @@ delay_entry = tk.Entry(frame_top, width=5); delay_entry.insert(0, "1.0"); delay_
 frame_task = tk.LabelFrame(root, text="Danh sách Truyện", padx=10, pady=10, font=("Arial", 9, "bold"))
 frame_task.pack(fill="x", pady=5)
 
-# Bổ sung thanh công cụ Excel
 excel_frame = tk.Frame(frame_task)
 excel_frame.grid(row=0, column=0, columnspan=5, pady=(0, 10), sticky="w")
 tk.Button(excel_frame, text="📄 Tải File Excel Mẫu", command=download_sample_excel, bg="#28a745", fg="white", font=("Arial", 9, "bold")).pack(side="left", padx=(0, 10))
 tk.Button(excel_frame, text="📥 Nhập từ Excel", command=import_excel_data, bg="#17a2b8", fg="white", font=("Arial", 9, "bold")).pack(side="left")
 
-# Dịch hàng tiêu đề xuống row=1
 tk.Label(frame_task, text="STT", font=("Arial", 8, "bold")).grid(row=1, column=0)
 tk.Label(frame_task, text="Link chương bắt đầu", font=("Arial", 8, "bold")).grid(row=1, column=1, sticky="w", padx=5)
 tk.Label(frame_task, text="Tên Truyện", font=("Arial", 8, "bold")).grid(row=1, column=2, sticky="w", padx=5)
@@ -368,7 +358,7 @@ tk.Label(frame_task, text="Số tải", font=("Arial", 8, "bold")).grid(row=1, c
 
 url_entries, name_entries, start_entries, count_entries = [], [], [], []
 for i in range(10):
-    tk.Label(frame_task, text=f"{i+1}.").grid(row=i+2, column=0) # Dịch các ô xuống
+    tk.Label(frame_task, text=f"{i+1}.").grid(row=i+2, column=0) 
     u = tk.Entry(frame_task, width=40); u.grid(row=i+2, column=1, padx=5, pady=2); url_entries.append(u)
     n = tk.Entry(frame_task, width=28); n.grid(row=i+2, column=2, padx=5, pady=2); name_entries.append(n)
     s = tk.Entry(frame_task, width=6); s.insert(0, "1"); s.grid(row=i+2, column=3, padx=5); start_entries.append(s)
@@ -384,7 +374,6 @@ tk.Label(frame_sel, text="Nút Next (*):").grid(row=2, column=0, sticky="w")
 next_entry = tk.Entry(frame_sel, width=60); next_entry.grid(row=2, column=1, pady=2, padx=5)
 tk.Label(frame_sel, text="Xóa rác (Thẻ HTML):").grid(row=3, column=0, sticky="w")
 remove_entry = tk.Entry(frame_sel, width=60); remove_entry.grid(row=3, column=1, pady=2, padx=5)
-
 tk.Label(frame_sel, text="Xóa chữ (Văn bản):", fg="#d32f2f").grid(row=4, column=0, sticky="w")
 text_remove_entry = tk.Entry(frame_sel, width=60); text_remove_entry.grid(row=4, column=1, pady=2, padx=5)
 
