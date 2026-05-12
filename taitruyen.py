@@ -13,7 +13,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 # ================= HỆ THỐNG AUTO-UPDATE =================
-APP_VERSION = 2.0  # Mỗi lần đăng Github, bạn nhớ nâng số này lên (VD: 1.1)
+APP_VERSION = 1.0  # Mỗi lần đăng Github, bạn nhớ nâng số này lên (VD: 1.1)
 
 VERSION_URL = "https://raw.githubusercontent.com/canxi99/Tool-Tai-Truyen/refs/heads/main/version.txt"
 CODE_URL = "https://raw.githubusercontent.com/canxi99/Tool-Tai-Truyen/refs/heads/main/taitruyen.py"
